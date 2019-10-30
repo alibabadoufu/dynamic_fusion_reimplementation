@@ -19,6 +19,7 @@ max_question_length = 0     # max question length. Set to 0 if you take the larg
 gpuid   = '1'
 
 # training config
+exp_id       = 1         # 1 = parallel dfaf network; 2 = parallel dfaf network with q-network
 epochs       = 100
 batch_size   = 256
 initial_lr   = 2.0e-3

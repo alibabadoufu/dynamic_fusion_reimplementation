@@ -97,7 +97,7 @@ def main():
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--resume', nargs='*')
     args = parser.parse_args()
-    
+
     if args.test:
         args.eval_only = True
     src = open('model.py').read()

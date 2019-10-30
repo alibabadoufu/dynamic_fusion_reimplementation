@@ -144,8 +144,8 @@ class Classifier(nn.Sequential):
         q_mask                 [batch, max_len]
         """
         v_mean = (v * v_mask.unsqueeze(2)).sum(1) / v_mask.sum(1).unsqueeze(1)
-        # b_mean = (b * v_mask.unsqueeze(2)).sum(1) / v_mask.sum(1).unsqueeze(1)
         q_mean = (q * q_mask.unsqueeze(2)).sum(1) / q_mask.sum(1).unsqueeze(1)
+        
         out = self.lin1(self.drop(v_mean * q_mean))
         out = self.lin2(self.drop(self.relu(self.bn(out))))
         return out
@@ -176,17 +176,15 @@ class SingleBlock(nn.Module):
         self.interBlock       = InterModalityUpdate(output_size, output_size, output_size, num_inter_head, drop)
         self.intraBlock       = DyIntraModalityUpdate(output_size, output_size, output_size, num_intra_head, drop)
 
-        self.n_relations    = 8
-        self.dim_g          = int(output_size / self.n_relations)
+        if config.exp_id == 2:
+            self.n_relations    = 8
+            self.dim_g          = int(output_size / self.n_relations)
 
-        self.RelationModule   = RelationModule(n_relations      = self.n_relations, 
-                                               hidden_dim       = output_size, 
-                                               key_feature_dim  = self.dim_g, 
-                                               geo_feature_dim  = self.dim_g,
-                                               drop             = drop)
-
-        # self.interBlock_question = InterModalityUpdate(output_size, output_size, output_size, num_inter_head, drop)
-        # self.intraBlock_question = DyIntraModalityUpdate(output_size, output_size, output_size, num_intra_head, drop)
+            self.RelationModule   = RelationModule(n_relations      = self.n_relations, 
+                                                hidden_dim       = output_size, 
+                                                key_feature_dim  = self.dim_g, 
+                                                geo_feature_dim  = self.dim_g,
+                                                drop             = drop)
 
         self.drop = nn.Dropout(drop)
 
@@ -206,22 +204,12 @@ class SingleBlock(nn.Module):
         b_init = b.clone()
         q_init = q.clone()
 
-        # for j in range(self.iteration):
-
         for i in range(self.num_block):
             v, q = self.interBlock(v, q, v_mask, q_mask)
-            # v, b = self.interBlock_space(v, b, v_mask)
             v, q = self.intraBlock(v, q, v_mask, q_mask)
 
-            v = self.RelationModule(v, b, v_mask, q, q_mask)
-
-            # for i in range(self.spa_block):
-            #     v, b = self.interBlock_spatial(v, b, v_mask, v_mask)
-            #     v, b = self.intraBlock_spatial(v, b, v_mask, v_mask)
-
-            # for i in range(self.que_block):
-            #     b, q = self.interBlock_question(b, q, v_mask, q_mask)
-            #     b, q = self.intraBlock_question(b, q, v_mask, q_mask)
+            if config.exp_id == 2:
+                v = self.RelationModule(v, b, v_mask, q, q_mask)
 
         return v,q,b
 
@@ -260,13 +248,6 @@ class RelationModule(nn.Module):
         q_sscore   = self.sigmoid(q_compress)                               # (bs, q_len, 1)
         q_summary  = torch.bmm(q.transpose(1,2), q_sscore).squeeze(-1)      # (bs, 512)
         q_map_obj  = self.relu(self.q_map_obj(q_summary))                   # (bs, 36*36)
-
-        # for N in range(self.Nr):
-        #     if(isFirst):
-        #         concat = self.relation[N](v, b, q_map_obj, v_mask)
-        #         isFirst=False
-        #     else:
-        #         concat = torch.cat((concat, self.relation[N](v, b, q_map_obj, v_mask)), dim=-1)
 
         concat = self.relation(v, b, q_map_obj, v_mask)
 
@@ -332,8 +313,6 @@ class RelationUnit(nn.Module):
 
         output = torch.matmul(w_mn, w_v)     # (bs, n_rel, num_obj, 64)
         output = unshape(output)
-
-        # output = torch.sum(output, dim=-2)   # (bs, 64)
 
         return output
 
@@ -417,8 +396,11 @@ class InterModalityUpdate(nn.Module):
         cat_q = torch.cat((q, q_update), dim=2)
 
         updated_v = self.v_output(self.drop(cat_v))
-        updated_q = q
-        # updated_q = self.q_output(self.drop(cat_q))
+        
+        if config.exp_id == 2:
+            updated_q = q
+        else:
+            updated_q = self.q_output(self.drop(cat_q))
 
         return updated_v, updated_q
 
