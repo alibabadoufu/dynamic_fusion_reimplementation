@@ -13,27 +13,23 @@ import numpy as np
 import config
 import utils
 
-
 preloaded_vocab = None
 
 
 def get_loader(train=False, val=False, test=False):
     """ Returns a data loader for the desired split """
-    split = VQA(
-        utils.path_for(train=train, val=val, test=test, question=True),
-        utils.path_for(train=train, val=val, test=test, answer=True),
-        config.preprocessed_trainval_path if not test else config.preprocessed_test_path,
-        answerable_only=train,
-        dummy_answers=test,
-    )
-    loader = torch.utils.data.DataLoader(
-        split,
-        batch_size=config.batch_size,
-        shuffle=train,  # only shuffle the data in training
-        pin_memory=True,
-        num_workers=config.data_workers,
-        collate_fn=collate_fn,
-    )
+    split = VQA( utils.path_for(train=train, val=val, test=test, question=True),
+                 utils.path_for(train=train, val=val, test=test, answer=True),
+                 config.preprocessed_trainval_path if not test else config.preprocessed_test_path,
+                 answerable_only=train,
+                 dummy_answers=test)
+    
+    loader = torch.utils.data.DataLoader( split,
+                                          batch_size=config.batch_size,
+                                          shuffle=train,  # only shuffle the data in training
+                                          pin_memory=True,
+                                          num_workers=config.data_workers,
+                                          collate_fn=collate_fn)
     return loader
 
 
@@ -57,6 +53,7 @@ class VQA(data.Dataset):
             with open(config.vocabulary_path, 'r') as fd:
                 vocab_json = json.load(fd)
 
+        # load question ids
         self.question_ids = [q['question_id'] for q in questions_json['questions']]
 
         # vocab
@@ -64,16 +61,19 @@ class VQA(data.Dataset):
         self.token_to_index = self.vocab['question']
         self.answer_to_index = self.vocab['answer']
 
-        # q and a
-        self.questions = list(prepare_questions(questions_json))
-        self.answers = list(prepare_answers(answers_json))
-        self.questions = [self._encode_question(q) for q in self.questions]
-        self.answers = [self._encode_answers(a) for a in self.answers]
+        # question and answer
+        self.questions  = list(prepare_questions(questions_json))       # tokenize question
+        self.answers    = list(prepare_answers(answers_json))   
+        
+        self.max_length = config.max_question_length if config.max_question_length != 0 else self.max_question_length
 
-        # v
+        self.questions  = [self._encode_question(q) for q in self.questions]     # [[[2,3,14,5,...], 10], ...]
+        self.answers    = [self._encode_answers(a) for a in self.answers]        # [0,0,0,1,1,0,0,1]
+
+        # visual
         self.image_features_path = image_features_path
-        self.coco_id_to_index = self._create_coco_id_to_index()
-        self.coco_ids = [q['image_id'] for q in questions_json['questions']]
+        self.coco_id_to_index    = self._create_coco_id_to_index()      # {img_id -> id}
+        self.coco_ids            = [q['image_id'] for q in questions_json['questions']]
 
         self.dummy_answers= dummy_answers
 
@@ -112,6 +112,8 @@ class VQA(data.Dataset):
         answerable = []
         if count:
             number_indices = torch.LongTensor([self.answer_to_index[str(i)] for i in range(0, 8)])
+            print(number_indices)
+            exit()
         for i, answers in enumerate(self.answers):
             # store the indices of anything that is answerable
             if count:
@@ -123,9 +125,14 @@ class VQA(data.Dataset):
 
     def _encode_question(self, question):
         """ Turn a question into a vector of indices and a question length """
-        vec = torch.zeros(self.max_question_length).long()
+
+        vec = torch.zeros(self.max_length).long()
+
         for i, token in enumerate(question):
             index = self.token_to_index.get(token, 0)
+
+            if i == self.max_length: break
+
             vec[i] = index
         return vec, len(question)
 
@@ -158,7 +165,7 @@ class VQA(data.Dataset):
         if self.answerable_only:
             item = self.answerable[item]
         q, q_length = self.questions[item]
-        q_mask = torch.from_numpy((np.arange(self._max_length) < q_length).astype(int))
+        q_mask = torch.from_numpy((np.arange(self.max_length) < q_length).astype(int))
         if not self.dummy_answers:
             a = self.answers[item]
         else:

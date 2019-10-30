@@ -1,5 +1,6 @@
 import sys
 import os.path
+import os
 import argparse
 import math
 import json
@@ -33,21 +34,19 @@ def run(net, loader, optimizer, scheduler, tracker, train=False, has_answers=Tru
         idxs = []
         accs = []
 
-    loader = tqdm(loader, desc='{} E{:03d}'.format(prefix, epoch), ncols=0)
-    loss_tracker = tracker.track('{}_loss'.format(prefix), tracker_class(**tracker_params))
-    acc_tracker = tracker.track('{}_acc'.format(prefix), tracker_class(**tracker_params))
+    loader          = tqdm(loader, desc='{} E{:03d}'.format(prefix, epoch), ncols=0)
+    loss_tracker    = tracker.track('{}_loss'.format(prefix), tracker_class(**tracker_params))
+    acc_tracker     = tracker.track('{}_acc'.format(prefix), tracker_class(**tracker_params))
 
     for v, q, a, b, idx, v_mask, q_mask, _ in loader:
-        var_params = {
-            #'volatile': not train,
-            'requires_grad': False,
-        }
-        v = Variable(v.cuda(async=True), **var_params)
-        q = Variable(q.cuda(async=True), **var_params)
-        a = Variable(a.cuda(async=True), **var_params)
-        b = Variable(b.cuda(async=True), **var_params)
-        v_mask = Variable(v_mask.cuda(async=True), **var_params)
-        q_mask = Variable(q_mask.cuda(async=True), **var_params)
+        var_params = {'requires_grad': False}
+        
+        v = Variable(v.cuda(), **var_params)
+        q = Variable(q.cuda(), **var_params)
+        a = Variable(a.cuda(), **var_params)
+        b = Variable(b.cuda(), **var_params)
+        v_mask = Variable(v_mask.cuda(), **var_params)
+        q_mask = Variable(q_mask.cuda(), **var_params)
 
         out = net(v, b, q, v_mask, q_mask)
         if has_answers:
@@ -89,13 +88,16 @@ def run(net, loader, optimizer, scheduler, tracker, train=False, has_answers=Tru
 
 
 def main():
+    
+    os.environ["CUDA_VISIBLE_DEVICES"]=config.gpuid
+    
     parser = argparse.ArgumentParser()
-    parser.add_argument('name', nargs='*')
+    parser.add_argument('name'  , nargs='*')
     parser.add_argument('--eval', dest='eval_only', action='store_true')
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--resume', nargs='*')
     args = parser.parse_args()
-
+    
     if args.test:
         args.eval_only = True
     src = open('model.py').read()
@@ -134,6 +136,7 @@ def main():
     for i in range(config.epochs):
         if not args.eval_only:
             run(net, train_loader, optimizer, scheduler, tracker, train=True, prefix='train', epoch=i)
+            
         r = run(net, val_loader, optimizer, scheduler, tracker, train=False, prefix='val', epoch=i, has_answers=not args.test)
 
         if not args.test:

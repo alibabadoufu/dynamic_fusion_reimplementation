@@ -1,6 +1,13 @@
 __pycache__
 *.pyc
 *.pth
+*.txt
+*.ipynb
+*.dummy
+data/*
+genome-test.h5
+genome-trainval.h5
+.ipynb_checkpoints
 val_acc.png
 results.json
 vocab.json

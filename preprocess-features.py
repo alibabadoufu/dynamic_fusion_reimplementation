@@ -31,7 +31,7 @@ def main():
     )
     boxes_shape = (
         features_shape[0],
-        4,
+        5,
         config.output_size,
     )
 
@@ -60,20 +60,37 @@ def main():
             readers.append(reader)
 
         reader = itertools.chain.from_iterable(readers)
+
         for i, item in enumerate(tqdm(reader, total=features_shape[0])):
             coco_ids[i] = int(item['image_id'])
-            widths[i] = int(item['image_w'])
-            heights[i] = int(item['image_h'])
+            widths[i]   = int(item['image_w'])
+            heights[i]  = int(item['image_h'])
 
-            buf = base64.decodestring(item['features'].encode('utf8'))
+            image_w = float(item['image_w'])
+            image_h = float(item['image_h'])
+
+            buf   = base64.decodestring(item['features'].encode('utf8'))
             array = np.frombuffer(buf, dtype='float32')
             array = array.reshape((-1, config.output_features)).transpose()
             features[i, :, :array.shape[1]] = array
 
-            buf = base64.decodestring(item['boxes'].encode('utf8'))
+            buf   = base64.decodestring(item['boxes'].encode('utf8'))
             array = np.frombuffer(buf, dtype='float32')
             array = array.reshape((-1, 4)).transpose()
-            boxes[i, :, :array.shape[1]] = array
+
+            # create new scaled image
+            new_array = array.copy()
+            new_array[0,:] = new_array[0,:] / image_w
+            new_array[1,:] = new_array[1,:] / image_h
+            new_array[2,:] = new_array[2,:] / image_w
+            new_array[3,:] = new_array[3,:] / image_h
+
+            area = (new_array[2,:] * new_array[3,:]) / (image_w + image_h)
+            area = np.expand_dims(area, axis=0)
+            
+            shape_array = np.concatenate([new_array, area], axis=0)
+
+            boxes[i, :, :array.shape[1]] = shape_array
 
 
 if __name__ == '__main__':
